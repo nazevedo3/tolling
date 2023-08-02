@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 
-	"github.com/confluentinc/confluent-kafka-go/kafka"
+	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/nazevedo3/tolling/types"
 )
 
@@ -13,9 +13,10 @@ type DataProducer interface {
 
 type KafkaProducer struct {
 	producer *kafka.Producer
+	topic    string
 }
 
-func NewKafkaProducer() (DataProducer, error) {
+func NewKafkaProducer(topic string) (DataProducer, error) {
 	p, err := kafka.NewProducer(&kafka.ConfigMap{"bootstrap.servers": "localhost"})
 	if err != nil {
 		return nil, err
@@ -36,6 +37,7 @@ func NewKafkaProducer() (DataProducer, error) {
 
 	return &KafkaProducer{
 		producer: p,
+		topic:    topic,
 	}, nil
 
 }
@@ -46,7 +48,7 @@ func (p *KafkaProducer) ProduceData(data types.OBUData) error {
 		return err
 	}
 	return p.producer.Produce(&kafka.Message{
-		TopicPartition: kafka.TopicPartition{Topic: &kafkaTopic,
+		TopicPartition: kafka.TopicPartition{Topic: &p.topic,
 			Partition: kafka.PartitionAny,
 		},
 		Value: b,
