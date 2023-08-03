@@ -10,7 +10,11 @@ calculator:
 	@go build -o bin/calculator ./distance_calculator
 	@./bin/calculator
 
+agg:
+	@go build -o bin/agg ./aggregator
+	@./bin/agg
+
 docker:
 	docker-compose up -d --force-recreate
 
-.PHONY: obu
+.PHONY: obu, agg
