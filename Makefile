@@ -17,4 +17,4 @@ agg:
 docker:
 	docker-compose up -d --force-recreate
 
-.PHONY: obu, agg
+.PHONY: obu agg
