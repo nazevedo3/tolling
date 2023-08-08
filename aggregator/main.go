@@ -4,14 +4,18 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net"
 	"net/http"
 	"strconv"
 
 	"github.com/nazevedo3/tolling/types"
+	"google.golang.org/grpc"
 )
 
 func main() {
-	listenAddr := flag.String("listenaddr", ":3000", "the listen address of the HTTP server")
+	httpListenAdd := flag.String("httpAddr", ":3000", "the listen address of the HTTP server")
+	grpcListenAdd := flag.String("grpcAddr", ":3001", "the listen address of the GRPC server")
+
 	flag.Parse()
 
 	var (
@@ -19,7 +23,23 @@ func main() {
 		svc   = NewInvoiceAggregator(store)
 	)
 	svc = NewLogMiddleware(svc)
-	makeHTTPTransport(*listenAddr, svc)
+	go makeGRPCTransport(*grpcListenAdd, svc)
+	makeHTTPTransport(*httpListenAdd, svc)
+}
+
+func makeGRPCTransport(listenAddr string, svc Aggregator) error {
+	fmt.Printf("GRPC transport running on port %s\n", listenAddr)
+	// Make a TCP listener
+	ln, err := net.Listen("TCP", listenAddr)
+	if err != nil {
+		return err
+	}
+	defer ln.Close()
+	// Make a new GRPC native server with (options)
+	server := grpc.NewServer([]grpc.ServerOption{}...)
+	// Register our GRPC server implentation to the GRPC package
+	types.RegisterAggregatorServer(server, NewGRPCAggregatorServer(svc))
+	return server.Serve(ln)
 }
 
 func makeHTTPTransport(listenAddr string, svc Aggregator) {
