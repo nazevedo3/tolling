@@ -2,34 +2,35 @@ package main
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 
+	"github.com/joho/godotenv"
 	"github.com/nazevedo3/tolling/types"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/grpc"
 )
 
 func main() {
-	httpListenAdd := flag.String("httpAddr", ":3000", "the listen address of the HTTP server")
-	grpcListenAdd := flag.String("grpcAddr", ":3001", "the listen address of the GRPC server")
-
-	flag.Parse()
-
+	if err := godotenv.Load(); err != nil {
+		log.Fatal(err)
+	}
 	var (
-		store = NewMemoryStore()
-		svc   = NewInvoiceAggregator(store)
+		store         = NewMemoryStore()
+		svc           = NewInvoiceAggregator(store)
+		grpcListenAdd = os.Getenv("AGG_GRPC_ENDPOINT")
+		httpListenAdd = os.Getenv("AGG_HTTP_ENDPOINT")
 	)
 	svc = NewMetricsMiddleware(svc)
 	svc = NewLogMiddleware(svc)
 	go func() {
-		log.Fatal(makeGRPCTransport(*grpcListenAdd, svc))
+		log.Fatal(makeGRPCTransport(grpcListenAdd, svc))
 	}()
-	log.Fatal(makeHTTPTransport(*httpListenAdd, svc))
+	log.Fatal(makeHTTPTransport(httpListenAdd, svc))
 }
 
 func makeGRPCTransport(listenAddr string, svc Aggregator) error {
@@ -58,6 +59,10 @@ func makeHTTPTransport(listenAddr string, svc Aggregator) error {
 
 func handleGetInvoice(svc Aggregator) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "method not supported"})
+			return
+		}
 		values, ok := r.URL.Query()["obu"]
 		if !ok {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing OBU ID"})
@@ -80,6 +85,10 @@ func handleGetInvoice(svc Aggregator) http.HandlerFunc {
 
 func handleAggregate(svc Aggregator) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "method not supported"})
+			return
+		}
 		var distance types.Distance
 		if err := json.NewDecoder(r.Body).Decode(&distance); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
