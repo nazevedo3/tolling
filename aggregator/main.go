@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"strconv"
 
 	"github.com/joho/godotenv"
 	"github.com/nazevedo3/tolling/types"
@@ -49,39 +48,41 @@ func makeGRPCTransport(listenAddr string, svc Aggregator) error {
 }
 
 func makeHTTPTransport(listenAddr string, svc Aggregator) error {
-	fmt.Println("HTTP transport running on port ", listenAddr)
-	http.HandleFunc("/aggregate", handleAggregate(svc))
-	http.HandleFunc("/invoice", handleGetInvoice(svc))
+	aggMetricHandler := newHTTPMetricsHandler("aggregate")
+	invMetricHandler := newHTTPMetricsHandler("invoice")
+	http.HandleFunc("/aggregate", aggMetricHandler.instrument(handleAggregate(svc)))
+	http.HandleFunc("/invoice", invMetricHandler.instrument(handleGetInvoice(svc)))
 	http.Handle("/metrics", promhttp.Handler())
+	fmt.Println("HTTP transport running on port ", listenAddr)
 	return http.ListenAndServe(listenAddr, nil)
 
 }
 
-func handleGetInvoice(svc Aggregator) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "GET" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "method not supported"})
-			return
-		}
-		values, ok := r.URL.Query()["obu"]
-		if !ok {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing OBU ID"})
-			return
-		}
-		obuID, err := strconv.Atoi(values[0])
-		if err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid OBU ID"})
-			return
-		}
-		invoice, err := svc.CalculateInvoice(obuID)
-		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
-		}
-		writeJSON(w, http.StatusOK, invoice)
+// func handleGetInvoice(svc Aggregator) http.HandlerFunc {
+// 	return func(w http.ResponseWriter, r *http.Request) {
+// 		if r.Method != "GET" {
+// 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "method not supported"})
+// 			return
+// 		}
+// 		values, ok := r.URL.Query()["obu"]
+// 		if !ok {
+// 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing OBU ID"})
+// 			return
+// 		}
+// 		obuID, err := strconv.Atoi(values[0])
+// 		if err != nil {
+// 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid OBU ID"})
+// 			return
+// 		}
+// 		invoice, err := svc.CalculateInvoice(obuID)
+// 		if err != nil {
+// 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+// 			return
+// 		}
+// 		writeJSON(w, http.StatusOK, invoice)
 
-	}
-}
+// 	}
+// }
 
 func handleAggregate(svc Aggregator) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
